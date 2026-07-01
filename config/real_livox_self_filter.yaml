@@ -35,4 +35,6 @@ livox_custom_msg_filter:
     debug_filtered_topic: /livox/points_filtered
     debug_rejected_topic: /livox/points_rejected
     debug_max_points: 200000
+    # Depth 1 avoids stale point-cloud queues in the real-time LIO path.
+    qos_depth: 1
     stats_log_period: 2.0

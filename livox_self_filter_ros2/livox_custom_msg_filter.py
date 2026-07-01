@@ -197,6 +197,7 @@ class LivoxCustomMsgFilter(Node):
         self.declare_parameter("debug_filtered_topic", "/livox/points_filtered")
         self.declare_parameter("debug_rejected_topic", "/livox/points_rejected")
         self.declare_parameter("debug_max_points", 200000)
+        self.declare_parameter("qos_depth", 1)
         self.declare_parameter("stats_log_period", 2.0)
 
         self.input_topic = self._string_param("input_topic")
@@ -223,15 +224,17 @@ class LivoxCustomMsgFilter(Node):
         )
         self.publish_debug_clouds = bool(self.get_parameter("publish_debug_clouds").value)
         self.debug_max_points = int(self.get_parameter("debug_max_points").value)
+        self.qos_depth = max(1, int(self.get_parameter("qos_depth").value))
         self.stats_log_period = float(self.get_parameter("stats_log_period").value)
         self.last_stats_log_time = self.get_clock().now()
         self.last_tf_warning = ""
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.publisher = self.create_publisher(CustomMsg, self.output_topic, 10)
+        self.cloud_qos = QoSProfile(depth=self.qos_depth)
+        self.publisher = self.create_publisher(CustomMsg, self.output_topic, self.cloud_qos)
         self.subscription = self.create_subscription(
-            CustomMsg, self.input_topic, self._on_msg, 10
+            CustomMsg, self.input_topic, self._on_msg, self.cloud_qos
         )
         qos = QoSProfile(depth=1)
         self.filtered_debug_publisher = None
@@ -250,6 +253,7 @@ class LivoxCustomMsgFilter(Node):
             f"{self.input_topic} -> {self.output_topic}, "
             f"filter_frame={self.filter_frame}, boxes={box_names}, "
             f"box_padding={self.box_padding:.3f}, "
+            f"qos_depth={self.qos_depth}, "
             f"debug_clouds={self.publish_debug_clouds}, "
             f"front_crop_enabled={self.front_crop_enabled}"
         )
@@ -310,19 +314,38 @@ class LivoxCustomMsgFilter(Node):
             )
 
     def _maybe_log_stats(
-        self, total: int, kept: int, rejected_self: int, rejected_crop: int
+        self,
+        total: int,
+        kept: int,
+        rejected_self: int,
+        rejected_crop: int,
+        input_age_ms: Optional[float],
+        process_ms: float,
     ) -> None:
         now = self.get_clock().now()
         if (now - self.last_stats_log_time).nanoseconds * 1.0e-9 < self.stats_log_period:
             return
         self.last_stats_log_time = now
         ratio = 100.0 * kept / max(total, 1)
+        age_text = "unknown" if input_age_ms is None else f"{input_age_ms:.1f}ms"
         self.get_logger().info(
             f"livox filter stats: input={total}, kept={kept} ({ratio:.1f}%), "
-            f"self_rejected={rejected_self}, crop_rejected={rejected_crop}"
+            f"self_rejected={rejected_self}, crop_rejected={rejected_crop}, "
+            f"stamp_age={age_text}, process={process_ms:.1f}ms"
         )
 
+    def _stamp_age_ms(self, stamp) -> Optional[float]:
+        if stamp is None:
+            return None
+        if int(stamp.sec) == 0 and int(stamp.nanosec) == 0:
+            return None
+        return (
+            self.get_clock().now() - Time.from_msg(stamp)
+        ).nanoseconds * 1.0e-6
+
     def _on_msg(self, msg: CustomMsg) -> None:
+        callback_start = self.get_clock().now()
+        input_age_ms = self._stamp_age_ms(msg.header.stamp)
         source_frame = self._source_frame(msg)
         source_points = points_from_livox_msg(msg)
         filter_points = self._points_in_filter_frame(source_points, source_frame, msg)
@@ -348,11 +371,14 @@ class LivoxCustomMsgFilter(Node):
             filter_points[~keep_mask],
             msg.header.stamp,
         )
+        process_ms = (self.get_clock().now() - callback_start).nanoseconds * 1.0e-6
         self._maybe_log_stats(
             len(filter_points),
             int(np.count_nonzero(keep_mask)),
             int(np.count_nonzero(self_reject)),
             int(np.count_nonzero(crop_reject & ~self_reject)),
+            input_age_ms,
+            process_ms,
         )
 
 
