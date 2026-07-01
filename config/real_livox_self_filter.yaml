@@ -1,0 +1,38 @@
+livox_custom_msg_filter:
+  ros__parameters:
+    input_topic: /livox/lidar
+    output_topic: /livox/lidar_filtered
+
+    filter_frame: base_link
+    source_frame_override: livox_mid360_link
+    use_latest_tf: true
+    tf_timeout: 0.05
+    assume_same_frame_if_tf_missing: false
+
+    # Real Ranger Mini V3 body and implement boxes in base_link.
+    # Format: name:x,y,z,roll,pitch,yaw,size_x,size_y,size_z
+    box_filters:
+      - "base_body:0.0,0.0,-0.10,0.0,0.0,0.0,0.50,0.35,0.20"
+      - "body_top_deck:0.0,0.0,0.05,0.0,0.0,0.0,0.72,0.50,0.08"
+      - "body_upper_self_envelope:0.0,0.0,0.28,0.0,0.0,0.0,0.72,0.50,0.46"
+      - "low_imp_vertical:-0.21,0.11,0.20,0.0,0.0,0.0,0.04,0.04,0.30"
+      - "low_imp_horizontal:-0.21,0.33,0.33,0.0,0.0,0.0,0.04,0.40,0.04"
+      - "high_imp_vertical:-0.21,-0.11,0.35,0.0,0.0,0.0,0.04,0.04,0.60"
+      - "high_imp_horizontal:-0.21,-0.38,0.63,0.0,0.0,0.0,0.04,0.50,0.04"
+      - "low_imp_ray_guard:0.0,0.055,0.28,0.0,0.0,2.885,0.58,0.12,0.50"
+      - "high_imp_ray_guard:0.0,-0.055,0.28,0.0,0.0,-2.885,0.58,0.12,0.50"
+    box_padding: 0.08
+
+    front_crop_enabled: false
+    front_x_min: -0.5
+    front_x_max: 8.0
+    front_y_min: -3.0
+    front_y_max: 3.0
+    front_z_min: -2.0
+    front_z_max: 3.0
+
+    publish_debug_clouds: false
+    debug_filtered_topic: /livox/points_filtered
+    debug_rejected_topic: /livox/points_rejected
+    debug_max_points: 200000
+    stats_log_period: 2.0
