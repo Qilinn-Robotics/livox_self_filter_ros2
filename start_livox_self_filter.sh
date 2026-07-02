@@ -8,9 +8,6 @@ export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-0}"
 
 set +u
 source /opt/ros/humble/setup.bash
-if [[ -f "$HOME/livox-ws/install/setup.bash" ]]; then
-  source "$HOME/livox-ws/install/setup.bash"
-fi
 for setup_file in \
   "$SCRIPT_DIR/../../install/setup.bash" \
   "$SCRIPT_DIR/../install/setup.bash" \
@@ -22,7 +19,7 @@ for setup_file in \
 done
 set -u
 
-FILTER_PARAMS_FILE="${LIVOX_SELF_FILTER_CONFIG:-$SCRIPT_DIR/config/real_livox_self_filter.yaml}"
+FILTER_PARAMS_FILE="${LIVOX_SELF_FILTER_CONFIG:-$SCRIPT_DIR/livox_self_filter_ros2/config/real_livox_self_filter.yaml}"
 if [[ ! -f "$FILTER_PARAMS_FILE" ]]; then
   echo "Livox self-filter config file not found: $FILTER_PARAMS_FILE" >&2
   exit 1

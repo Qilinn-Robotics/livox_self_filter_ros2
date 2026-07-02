@@ -6,7 +6,15 @@ mapping pipelines such as FAST-LIO.
 
 The node is intentionally small and standalone. It does not depend on CHAMP,
 FAST-LIO internals, or a specific robot driver. Robot geometry is configured
-with YAML boxes.
+with YAML boxes. The repository contains two ROS 2 packages:
+
+```text
+livox_ros_driver2/        # minimal CustomMsg/CustomPoint message stub
+livox_self_filter_ros2/   # C++ self-filter node
+```
+
+Because the message stub is included, the filter can be built without sourcing
+a separate Livox workspace.
 
 ```text
 Livox driver -> /livox/lidar -> livox_custom_msg_filter -> /livox/lidar_filtered -> FAST-LIO
@@ -36,11 +44,10 @@ filtered cloud does not need to round-trip through another machine.
 ## Dependencies
 
 - ROS 2 Humble
-- `livox_ros_driver2`
-- `rclpy`
+- `rclcpp`
 - `tf2_ros`
 - `sensor_msgs`
-- `numpy`
+- `geometry_msgs`
 
 ## Installation
 
@@ -53,8 +60,7 @@ git clone https://github.com/Qilinn-Robotics/livox_self_filter_ros2.git
 
 cd ~/livox_filter_ws
 source /opt/ros/humble/setup.bash
-source ~/livox-ws/install/setup.bash
-colcon build --symlink-install --packages-select livox_self_filter_ros2
+colcon build --symlink-install --packages-select livox_ros_driver2 livox_self_filter_ros2
 source install/setup.bash
 ```
 
@@ -66,7 +72,7 @@ Start the filter:
 ros2 launch livox_self_filter_ros2 real_livox_self_filter.launch.py
 ```
 
-Or use the helper script from the package source folder:
+Or use the helper script from the repository source folder:
 
 ```bash
 ./start_livox_self_filter.sh
@@ -119,16 +125,19 @@ ros2 launch livox_ros_driver2 msg_MID360_launch.py
 
 # Terminal 2: self filter
 source /opt/ros/humble/setup.bash
-source ~/livox-ws/install/setup.bash
 source ~/livox_filter_ws/install/setup.bash
 ros2 launch livox_self_filter_ros2 real_livox_self_filter.launch.py
 
 # Terminal 3: FAST-LIO
 source /opt/ros/humble/setup.bash
-source ~/livox-ws/install/setup.bash
+source ~/livox_filter_ws/install/setup.bash
 source ~/fastlio-ws/install/setup.bash
 ros2 launch fastlio2 lio_launch.py
 ```
+
+The Livox driver executable still comes from your driver workspace, but this
+filter package ships the message definitions required to compile and run the
+filter itself.
 
 For multi-machine ROS 2 setups, remember:
 
@@ -142,7 +151,7 @@ export ROS_LOCALHOST_ONLY=0
 Main config:
 
 ```text
-config/real_livox_self_filter.yaml
+livox_self_filter_ros2/config/real_livox_self_filter.yaml
 ```
 
 Important parameters:
