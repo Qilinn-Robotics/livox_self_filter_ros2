@@ -238,6 +238,8 @@ public:
     debug_max_points_ = declare_parameter<int>("debug_max_points", 200000);
     qos_depth_ = std::max(1, static_cast<int>(declare_parameter<int>("qos_depth", 1)));
     stats_log_period_ = declare_parameter<double>("stats_log_period", 2.0);
+    min_input_points_ = std::max(0, static_cast<int>(declare_parameter<int>("min_input_points", 1000)));
+    min_output_points_ = std::max(0, static_cast<int>(declare_parameter<int>("min_output_points", 1000)));
     last_stats_log_time_ = now();
 
     const auto box_values =
@@ -272,10 +274,12 @@ public:
     RCLCPP_INFO(
       get_logger(),
       "Livox CustomMsg C++ filter ready: %s -> %s, filter_frame=%s, boxes=%s, "
-      "box_padding=%.3f, qos_depth=%d, debug_clouds=%s, front_crop_enabled=%s",
+      "box_padding=%.3f, qos_depth=%d, min_input_points=%d, min_output_points=%d, "
+      "debug_clouds=%s, front_crop_enabled=%s",
       input_topic_.c_str(), output_topic_.c_str(), filter_frame_.c_str(),
       boxes_.empty() ? "(none)" : names.str().c_str(), box_padding_, qos_depth_,
-      publish_debug_clouds_ ? "true" : "false", front_crop_enabled_ ? "true" : "false");
+      min_input_points_, min_output_points_, publish_debug_clouds_ ? "true" : "false",
+      front_crop_enabled_ ? "true" : "false");
   }
 
 private:
@@ -470,6 +474,21 @@ private:
   {
     const auto callback_start = now();
     const double input_age_ms = stamp_age_ms(msg->header.stamp);
+    const auto input_points = msg->points.size();
+    if (msg->point_num != input_points) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "Livox CustomMsg point count mismatch: point_num=%u, points.size=%zu",
+        msg->point_num, input_points);
+    }
+    if (min_input_points_ > 0 && input_points < static_cast<std::size_t>(min_input_points_)) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "dropping low-point Livox frame before filtering: input=%zu, point_num=%u, "
+        "min_input_points=%d, stamp_age=%.1fms",
+        input_points, msg->point_num, min_input_points_, input_age_ms);
+      return;
+    }
     const std::string src_frame = source_frame(*msg);
     Mat4 transform;
     if (!get_transform_matrix(src_frame, *msg, &transform)) {
@@ -520,12 +539,23 @@ private:
     }
 
     out.point_num = static_cast<uint32_t>(out.points.size());
+    if (min_output_points_ > 0 && out.points.size() < static_cast<std::size_t>(min_output_points_)) {
+      const double process_ms = (now() - callback_start).seconds() * 1000.0;
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "dropping low-point Livox frame after filtering: input=%zu, kept=%zu, "
+        "min_output_points=%d, self_rejected=%zu, crop_rejected=%zu, "
+        "stamp_age=%.1fms, process=%.1fms",
+        input_points, out.points.size(), min_output_points_, rejected_self, rejected_crop,
+        input_age_ms, process_ms);
+      return;
+    }
     publisher_->publish(out);
     publish_debug(kept_debug, rejected_debug, msg->header.stamp);
 
     const double process_ms = (now() - callback_start).seconds() * 1000.0;
     maybe_log_stats(
-      msg->points.size(), out.points.size(), rejected_self, rejected_crop, input_age_ms, process_ms);
+      input_points, out.points.size(), rejected_self, rejected_crop, input_age_ms, process_ms);
   }
 
   std::string input_topic_;
@@ -549,6 +579,8 @@ private:
   double stats_log_period_{2.0};
   int debug_max_points_{200000};
   int qos_depth_{1};
+  int min_input_points_{1000};
+  int min_output_points_{1000};
   std::vector<BoxFilter> boxes_;
   std::string last_tf_warning_;
   rclcpp::Time last_stats_log_time_;

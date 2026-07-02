@@ -37,4 +37,8 @@ livox_custom_msg_filter:
     debug_max_points: 200000
     # Depth 1 avoids stale point-cloud queues in the real-time LIO path.
     qos_depth: 1
+    # Guard FAST-LIO from startup/transport partial frames. Normal MID-360
+    # CustomMsg frames are about 20k points at 10Hz in this setup.
+    min_input_points: 1000
+    min_output_points: 1000
     stats_log_period: 2.0
